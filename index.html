@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-Means Clustering — Interactive Visualizer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a33; --panel2:#0f1730; --line:#25304f;
+    --ink:#e8edfb; --muted:#93a0c2; --accent:#60a5fa;
+  }
+  html,body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans','IBM Plex Sans Thai',system-ui,sans-serif}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px}
+  .card2{background:var(--panel2);border:1px solid var(--line);border-radius:12px}
+  #canvas{width:100%;aspect-ratio:16/10;display:block;border-radius:12px;background:#080d1c;cursor:crosshair;touch-action:none}
+  #chart{width:100%;height:104px;display:block}
+  .shell{max-width:1560px;margin:0 auto;padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+  .main{display:grid;grid-template-columns:1fr;gap:12px}
+  .leftcol{display:flex;flex-direction:column;gap:8px}
+  .canvasWrap{display:flex;overflow:hidden}
+  .rightcol{display:flex;flex-direction:column;gap:10px}
+  .rightcol>*{flex:0 0 auto}
+  @media (min-width:1280px){
+    html,body{height:100%;overflow:hidden}
+    .shell{height:100dvh}
+    .main{flex:1;min-height:0;grid-template-columns:minmax(0,1fr) 364px}
+    .leftcol{min-height:0}
+    .canvasWrap{flex:1;min-height:140px}
+    #canvas{height:100%;width:100%;aspect-ratio:auto}
+    .rightcol{overflow-y:auto;min-height:0;padding-right:5px}
+  }
+  .btn{border-radius:10px;padding:.55rem .8rem;font-weight:600;font-size:.86rem;border:1px solid var(--line);
+       background:#1a2444;color:var(--ink);transition:.15s;white-space:nowrap}
+  .btn:hover:not(:disabled){background:#243257;border-color:#3b4a77}
+  .btn:disabled{opacity:.35;cursor:not-allowed}
+  .btn-primary{background:#2563eb;border-color:#3b82f6}
+  .btn-primary:hover:not(:disabled){background:#1d4ed8}
+  .btn-go{background:#059669;border-color:#10b981}
+  .btn-go:hover:not(:disabled){background:#047857}
+  .btn-danger{background:#7f1d1d;border-color:#b91c1c}
+  .btn-danger:hover:not(:disabled){background:#991b1b}
+  input[type=range]{-webkit-appearance:none;height:5px;border-radius:99px;background:#243257;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+      background:var(--accent);border:2px solid #0b1020;cursor:pointer}
+  select{background:#1a2444;border:1px solid var(--line);border-radius:9px;padding:.4rem .5rem;color:var(--ink);font-size:.84rem}
+  input[type=number]{background:#1a2444;border:1px solid var(--line);border-radius:9px;padding:.28rem .45rem;
+      color:var(--ink);font-size:.84rem;font-family:ui-monospace,Menlo,Consolas,monospace;width:100%}
+  input[type=number]:focus{outline:none;border-color:var(--accent)}
+  input[type=number].bad{border-color:#f87171;background:#2a1520}
+  /* Feedback 4: every numeric control is a typed box AND a slider, side by side */
+  .randgrp{display:flex;align-items:center;gap:.45rem}
+  .randgrp input[type=number]{width:4.1rem;padding:.2rem .35rem;font-size:.76rem}
+  .randgrp input[type=range]{width:5.5rem}
+  .pair{display:flex;align-items:center;gap:.4rem}
+  .pair input[type=number]{width:4.4rem;flex:0 0 auto}
+  .pair input[type=range]{flex:1 1 auto;min-width:0}
+  .note{font-size:.64rem;line-height:1.35;margin-top:.15rem;color:var(--muted)}
+  .note.warn{color:#fca5a5}
+  .note.caution{color:#fcd34d}
+  .note.hint{color:#94a3b8}
+  /* Cluster status click-to-focus (Memory/cluster_focus_feature.md) */
+  .cluster-status-item{cursor:pointer;user-select:none;border-bottom:2px solid transparent;
+        padding-bottom:1px;transition:opacity .3s,transform .2s,border-color .2s}
+  .cluster-status-item:hover{opacity:.8;transform:scale(1.05)}
+  .cluster-status-item.active{border-bottom-color:var(--cc)}
+  .cluster-status-item.dimmed{opacity:.4}
+  .pc{padding:.2rem .5rem;border-radius:6px;transition:.2s;display:block;line-height:1.7}
+  .pc.on{background:rgba(96,165,250,.16);color:#bfdbfe;box-shadow:inset 2px 0 0 var(--accent)}
+  .pc.off{color:#64748b}
+  .tag{font-size:.68rem;padding:.12rem .45rem;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .tool{border-radius:8px;padding:.4rem .6rem;font-size:1.5rem;line-height:1.1;border:1px solid transparent;
+        background:transparent;transition:.15s}
+  .tool:hover:not(:disabled){background:#243257}
+  .tool.on{background:#2563eb;border-color:#3b82f6}
+  .tool:disabled{opacity:.28;cursor:not-allowed}
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem}
+  .mini{border-radius:8px;padding:.25rem .5rem;font-size:.78rem;font-weight:600;border:1px solid var(--line);
+        background:#1a2444;color:var(--ink);transition:.15s}
+  .mini:hover:not(:disabled){background:#243257}
+  .scroll::-webkit-scrollbar{width:7px}
+  .scroll::-webkit-scrollbar-thumb{background:#2c3a60;border-radius:9px}
+  details>summary{list-style:none;cursor:pointer}
+  details>summary::-webkit-details-marker{display:none}
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="shell">
+
+  <!-- ===== Header ===== -->
+  <header class="flex flex-wrap items-baseline justify-between gap-x-3">
+    <h1 class="text-lg md:text-xl font-bold tracking-tight">
+      K-Means Clustering <span class="text-[var(--accent)]">Interactive Visualizer</span>
+    </h1>
+    <p class="text-[11px] text-[var(--muted)]">Lloyd's algorithm, one step at a time &mdash; Initialize &rarr; Assign &rarr; Update &rarr; Convergence</p>
+  </header>
+
+  <div class="main">
+
+    <!-- ===== LEFT : Canvas + Controls ===== -->
+    <section class="leftcol card p-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+        <div class="flex items-baseline gap-2">
+          <h2 class="text-xs font-bold text-[var(--muted)] uppercase tracking-widest">Tools</h2>
+          <span id="phaseDot" class="hidden"></span>
+          <span id="phaseName" class="hidden"></span>
+        </div>
+      </div>
+
+      <!-- Canvas toolbar -->
+      <div class="toolbar">
+        <div class="flex gap-0.5 card2 p-1">
+          <button class="tool" data-tool="pen"      title="Pen — one click, one point (P)">✒️</button>
+          <button class="tool" data-tool="brush"    title="Brush — continuous stroke (B)">🖌️</button>
+          <button class="tool" data-tool="spray"    title="Spray — hold to keep spraying (S)">💨</button>
+          <button class="tool" data-tool="centroid" title="Centroid tool (C)">🎯</button>
+          <button class="tool" data-tool="eraser"   title="Eraser (E)">🧽</button>
+          <button class="tool" data-tool="hand"     title="Pan the view (H, middle mouse, or Space+drag)">✋</button>
+          <button class="tool" data-tool="random"   title="Random data — pick n beside the bar, then Generate (R)">🎲</button>
+        </div>
+
+        <!-- feedback 7: 🎲 is a real tool, and n is its option the way Size is the brush's -->
+        <div id="randOpts" class="randgrp text-[11px]">
+          <label class="flex items-center gap-1" title="How many points 🎲 generates — the n in the n ≥ K rule">n
+            <input id="inN" type="number" min="1" step="1" value="150"
+                   title="How many points 🎲 Random data generates. Any integer n ≥ 1 — no fixed ceiling.">
+            <input id="inNR" type="range" min="1" step="1" value="150" aria-label="Random points (n) slider"
+                   title="Drag to scrub n. The track always reaches at least as far as the K track, so you can never get stuck below K.">
+          </label>
+          <button id="bGen" class="mini" title="Generate exactly n random points from the dataset preset (G)">🎲 Generate</button>
+          <span id="nNote" class="note"></span>
+        </div>
+
+        <div id="brushOpts" class="flex items-center gap-2 text-[11px]">
+          <label class="flex items-center gap-1" title="Brush head radius in screen pixels">Size
+            <input id="inBrush" type="range" min="8" max="90" value="28" class="w-16">
+            <span id="lblBrush" class="mono text-[var(--accent)] w-5">28</span>
+          </label>
+          <label id="densOpt" class="flex items-center gap-1" title="Points emitted per dab">Flow
+            <input id="inDens" type="range" min="1" max="12" value="3" class="w-16">
+            <span id="lblDens" class="mono text-[var(--accent)] w-3">3</span>
+          </label>
+          <label id="stabOpt" class="flex items-center gap-1" title="Smooths the stroke — SAI-style stabilizer">Smooth
+            <input id="inStab" type="range" min="0" max="90" step="5" value="45" class="w-16">
+            <span id="lblStab" class="mono text-[var(--accent)] w-7">45%</span>
+          </label>
+        </div>
+
+        <div class="ml-auto flex items-center gap-1">
+          <button id="bZoomOut" class="mini" title="Zoom out (−)">−</button>
+          <span id="lblZoom" class="mono text-[11px] text-[var(--muted)] w-10 text-center">100%</span>
+          <button id="bZoomIn"  class="mini" title="Zoom in (+)">+</button>
+          <button id="bZoomRst" class="mini" title="Reset the view (0)">⟲ View</button>
+          <button id="bFocus" class="mini" title="Focus on data points (F)">🎯 Focus</button>
+        </div>
+      </div>
+      <div id="toolHint" class="text-[10px] text-[var(--muted)] -mt-1 leading-tight"></div>
+
+      <div class="canvasWrap"><canvas id="canvas"></canvas></div>
+
+      <!-- Legend -->
+      <div id="legend" class="flex flex-wrap items-center justify-center gap-4 text-xs text-[var(--muted)] card2 p-2"></div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        <div class="card2 px-2.5 py-1"><div class="text-[9px] text-[var(--muted)] uppercase tracking-wider">Iteration</div><div id="stIter" class="mono text-[15px] font-semibold leading-tight">0</div></div>
+        <div class="card2 px-2.5 py-1"><div class="text-[9px] text-[var(--muted)] uppercase tracking-wider">Data points</div><div id="stN" class="mono text-[15px] font-semibold leading-tight">0</div></div>
+        <div class="card2 px-2.5 py-1"><div class="text-[9px] text-[var(--muted)] uppercase tracking-wider">Cost (SSE)</div><div id="stSSE" class="mono text-[15px] font-semibold leading-tight">—</div></div>
+        <div class="card2 px-2.5 py-1"><div class="text-[9px] text-[var(--muted)] uppercase tracking-wider">Max move</div><div id="stMove" class="mono text-[15px] font-semibold leading-tight">—</div></div>
+        <div class="card2 px-2.5 py-1"><div class="text-[9px] text-[var(--muted)] uppercase tracking-wider">Centroids</div><div id="stCent" class="mono text-[15px] font-semibold leading-tight">0 / 3</div></div>
+      </div>
+
+      <!-- Controls -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-x-3 gap-y-2">
+        <div class="lg:col-span-2">
+          <div class="flex justify-between text-[11px] mb-0.5"><span class="font-semibold">Clusters (K)</span><span id="lblK" class="mono text-[var(--accent)]">3</span></div>
+          <div class="pair">
+            <input id="inK" type="number" min="1" step="1" value="3"
+                   title="Any integer K ≥ 1 — no fixed ceiling. K-means only requires K ≤ N (you cannot have more clusters than data points).">
+            <input id="inKR" type="range" min="1" step="1" value="3" aria-label="Clusters (K) slider"
+                   title="Drag to scrub K between 1 and N, the data-point count — the track stops at N because K &gt; N is not a legal clustering. Typing still wins: a K above N stays in the box, flagged, with Initialize refusing.">
+          </div>
+          <div id="kNote" class="note"></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[11px] mb-0.5"><span class="font-semibold">Speed</span><span id="lblSpd" class="mono text-[var(--accent)]">Normal</span></div>
+          <input id="inSpd" type="range" min="0" max="3" value="1" class="w-full">
+        </div>
+        <div class="flex flex-col justify-center gap-1 text-[11px]">
+          <label class="flex items-center gap-1.5 cursor-pointer"><input id="cbLines" type="checkbox" checked class="accent-blue-500"> Links to centroid<span id="lnHint" class="opacity-60"></span></label>
+          <label class="flex items-center gap-1.5 cursor-pointer"><input id="cbTrail" type="checkbox" checked class="accent-blue-500"> Movement trail</label>
+        </div>
+
+        <div class="col-span-2">
+          <label class="block text-[11px] font-semibold mb-0.5">Dataset preset</label>
+          <select id="inData" class="w-full">
+            <option value="blobs">Globular blobs &mdash; the well-behaved case</option>
+            <option value="sizes">Different sizes &mdash; clusters of unequal size</option>
+            <option value="density">Different densities &mdash; unequal spread</option>
+            <option value="rings">Non-globular &mdash; concentric rings</option>
+            <option value="outliers">Outliers &mdash; stray points</option>
+          </select>
+        </div>
+        <div class="col-span-2">
+          <label class="block text-[11px] font-semibold mb-0.5">Initial centroid method</label>
+          <select id="inInit" class="w-full">
+            <option value="random">Random &mdash; sampled from the data</option>
+            <option value="farthest">Farthest-first &mdash; spread as far apart as possible</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex flex-wrap gap-2 pt-2 border-t border-[var(--line)]">
+        <button id="bClr"  class="btn">🧹 Clear points</button>
+        <button id="bInit" class="btn btn-primary">1️⃣ Initialize Centroids</button>
+        <button id="bStep" class="btn btn-primary">2️⃣ Next Step</button>
+        <button id="bRun"  class="btn btn-go">▶️ Run to Completion</button>
+        <button id="bBest" class="btn">🏆 Best Centroids</button>
+        <button id="bReset" class="btn btn-danger">↺ Reset</button>
+      </div>
+      <div id="msg" class="text-[11px] text-[var(--muted)] min-h-[1.1rem] leading-tight"></div>
+    </section>
+
+    <!-- ===== RIGHT : Information Panel ===== -->
+    <aside class="rightcol">
+
+      <div class="card p-3">
+        <div class="text-[10px] uppercase tracking-widest text-[var(--muted)] mb-1">Current step</div>
+        <h2 id="infoTitle" class="text-lg font-bold mb-1.5">Not started</h2>
+        <p id="infoDesc" class="text-sm text-[var(--muted)] leading-relaxed">
+          Press “New random data”, or draw points on the canvas yourself, then press Initialize Centroids to start the algorithm.
+        </p>
+        <div id="infoMath" class="mono text-xs mt-3 text-[#bfdbfe] hidden card2 px-3 py-2"></div>
+      </div>
+
+      <div class="card p-3">
+        <div class="text-[10px] uppercase tracking-widest text-[var(--muted)] mb-2">Lloyd's Algorithm</div>
+        <div class="mono text-[12px]">
+          <span class="pc off" data-line="1">1. <b>Initial:</b> pick K points as the initial centroids</span>
+          <span class="pc off" data-line="2">2. <b>Repeat:</b></span>
+          <span class="pc off" data-line="3">3. &nbsp;&nbsp;<b>Assign:</b> attach every point to its nearest centroid</span>
+          <span class="pc off" data-line="4">4. &nbsp;&nbsp;<b>Update:</b> recompute each centroid = mean of its cluster</span>
+          <span class="pc off" data-line="5">5. <b>Until:</b> the centroids stop moving</span>
+        </div>
+        <div class="text-[11px] text-[var(--muted)] mt-3 pt-3 border-t border-[var(--line)] leading-relaxed">
+          Goal: minimize <span class="mono text-[#bfdbfe]">cost(C) = Σ<sub>i</sub> Σ<sub>x∈Ci</sub> dist(x, c<sub>i</sub>)</span><br>
+          This page reports it as SSE (sum of squared distances), which <b>never increases</b> from one iteration to the next.
+        </div>
+      </div>
+
+      <div class="card p-3">
+        <div class="text-[10px] uppercase tracking-widest text-[var(--muted)] mb-2">Convergence history (SSE)</div>
+        <canvas id="chart" class="w-full" height="110"></canvas>
+        <div id="histTxt" class="text-[11px] text-[var(--muted)] mt-1">No data yet</div>
+      </div>
+
+      <details class="card p-3">
+        <summary class="text-[10px] uppercase tracking-widest text-[var(--muted)] flex justify-between items-center">
+          <span>Limitations of K-means</span><span class="text-[var(--accent)] text-xs">▾</span>
+        </summary>
+        <ul class="text-[12px] text-[var(--muted)] mt-2 space-y-1.5 list-disc pl-4 leading-relaxed">
+          <li>Clusters of <b>unequal size</b> → try “Different sizes”</li>
+          <li>Clusters of <b>unequal density</b> → try “Different densities”</li>
+          <li><b>Non-globular</b> shapes → try “concentric rings”</li>
+          <li><b>Outliers</b> drag centroids off target → try “Outliers”</li>
+          <li><b>K itself</b> must be chosen up front. The algorithm only requires <span class="mono">1 ≤ K ≤ N</span> — there is no fixed upper number, but you cannot have more clusters than data points.</li>
+          <li>SSE always falls as K rises, and reaches <b>0 at K = N</b> (every point its own centroid), so a low SSE alone never proves a good K.</li>
+          <li class="!list-none pt-1 text-[#bfdbfe]">First remedy: use a K larger than the true number of groups, then merge the pieces afterwards.</li>
+        </ul>
+      </details>
+
+      <details class="card p-3">
+        <summary class="text-[10px] uppercase tracking-widest text-[var(--muted)] flex justify-between items-center">
+          <span>The initialization problem</span><span class="text-[var(--accent)] text-xs">▾</span>
+        </summary>
+        <ul class="text-[12px] text-[var(--muted)] mt-2 space-y-1.5 list-disc pl-4 leading-relaxed">
+          <li>Initial centroids are usually random, so <b>every run lands somewhere different</b> (press Reset → Initialize a few times).</li>
+          <li>Remedy 1: run it many times and keep the lowest-error result → the <b>Best Centroids</b> button.</li>
+          <li>Remedy 2: start from points that are <b>as far apart as possible</b> → the <b>Farthest-first</b> mode.</li>
+        </ul>
+      </details>
+
+      <details class="card p-3">
+        <summary class="text-[10px] uppercase tracking-widest text-[var(--muted)] flex justify-between items-center">
+          <span>The same thing in scikit-learn</span><span class="text-[var(--accent)] text-xs">▾</span>
+        </summary>
+<pre class="mono text-[11px] text-[#bfdbfe] mt-2 overflow-x-auto scroll card2 p-3">from sklearn.cluster import KMeans
+import numpy as np
+
+X = np.array([[1,2],[1,4],[1,0],
+              [4,2],[4,4],[4,0]])
+
+km = KMeans(n_clusters=2, random_state=0).fit(X)
+km.labels_          # [0 0 0 1 1 1]
+km.cluster_centers_ # [[1. 2.] [4. 2.]]</pre>
+      </details>
+
+      <div class="card p-3">
+        <div class="text-[10px] uppercase tracking-widest text-[var(--muted)] mb-2">ผู้จัดทำ · Team</div>
+        <div class="text-[13px] font-semibold mb-2">Board Game Party</div>
+        <ul class="text-[12px] space-y-1.5 leading-relaxed">
+          <li class="flex items-baseline gap-2.5"><span class="mono text-[11px] text-[var(--accent)] shrink-0">67015022</span><span>จารุเดช พนาลัย</span></li>
+          <li class="flex items-baseline gap-2.5"><span class="mono text-[11px] text-[var(--accent)] shrink-0">67015024</span><span>จิรภัทร จันทกนกากร</span></li>
+          <li class="flex items-baseline gap-2.5"><span class="mono text-[11px] text-[var(--accent)] shrink-0">67015060</span><span>ธนากร รัตนสวัสดิ์</span></li>
+          <li class="flex items-baseline gap-2.5"><span class="mono text-[11px] text-[var(--accent)] shrink-0">67015108</span><span>ภูชิต คงยาง</span></li>
+          <li class="flex items-baseline gap-2.5"><span class="mono text-[11px] text-[var(--accent)] shrink-0">67015164</span><span>อัครชัย วิเชียร</span></li>
+        </ul>
+      </div>
+
+    </aside>
+  </div>
+
+  <footer class="text-center text-[11px] text-[var(--muted)] mt-3 pb-3 xl:hidden">
+    Built from the <span class="mono">Clustering-k-mean.md</span> playbook · Single-file SPA — HTML5 Canvas + Vanilla JS
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* ======================= CONFIG ======================= */
+const COLORS = ["#60a5fa","#f472b6","#34d399","#fbbf24","#a78bfa","#22d3ee","#fb923c","#f87171"];
+const NAMES  = ["Cluster A","Cluster B","Cluster C","Cluster D","Cluster E","Cluster F","Cluster G","Cluster H"];
+const GREY   = "#64748b";
+
+/* K and n are NOT capped at a fixed number. The only bound k-means itself imposes is
+   1 ≤ K ≤ N (you cannot form more non-empty clusters than you have points), so the
+   palette and the cluster names have to keep going for any K the user asks for. */
+const KMIN = 1;
+/* Feedback 4 asks for a slider AND a number box. A range input must declare a max, but K and n
+   must not be capped — so the box is the authority and the slider is only a scrubber over an
+   adaptive range. The top end starts at a comfortable default and ratchets up to whatever was
+   typed; it never shrinks, so the track cannot rescale under a thumb mid-drag, and it can never
+   clamp a typed value. */
+const KSLIDE = 20, NSLIDE = 1000;
+let nTop = NSLIDE;
+/* Feedback 5 — K and the data points must relate the way the theory says they do:
+   "Data point = 999 → slider bar ต้องลากได้แค่ 999 · Data point = 696 → slider bar <= 696
+    เราจะลากเกินไม่ได้". So the track stops AT N and never stretches past it, whatever was typed.
+   Typing still wins for the VALUE (feedback 3: never rewrite what the user typed) — a K above N
+   stays in the box, turns the box red and blocks Initialize; the slider simply pins at its top end,
+   because a thumb position beyond N would be a K the theory does not allow. With no data there is
+   no N to bound against, so the slider falls back to a usable default. The track depends only on N,
+   which never changes mid-drag, so it cannot rescale under the thumb either. */
+const kSlideMax = () => kCap() || KSLIDE;
+/* Task 2: the n track must always reach at least as far as the K track, otherwise a user stuck at
+   K > n could not drag n up to fix it — the control would be a dead end. */
+const nSlideMax = () => (nTop = Math.max(nTop, NSLIDE, readInt("inN", 150), kSlideMax(), S.k));
+/** HSL → #rrggbb, so every cluster colour stays a hex string and the "+33" alpha suffixes keep working */
+function hslHex(h, s, l){
+  const f = n => {
+    const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+    const v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  };
+  return "#" + f(0) + f(8) + f(4);
+}
+/** Colour for cluster i — the 8 hand-picked hues first, then a golden-angle sweep so any K stays distinguishable */
+/* PERF: hslHex builds four strings per call and render() asks for a colour once per point per frame,
+   so past K = 8 every repaint was allocating garbage. The sweep is a pure function of i, so memoising
+   it can never go stale. */
+const _colCache = [];
+function colorFor(i){
+  if(i < 0) return GREY;
+  if(i < COLORS.length) return COLORS[i];
+  let c = _colCache[i];
+  if(c === undefined) c = _colCache[i] = hslHex(((i - COLORS.length) * 137.508) % 360, 0.68, 0.63);
+  return c;
+}
+/** Name for cluster i — A…H from NAMES, then I, J … Z, AA, AB … (spreadsheet style, unbounded) */
+function nameFor(i){
+  if(i < 0) return "unassigned";
+  if(i < NAMES.length) return NAMES[i];
+  let s = "", n = i;
+  do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while(n >= 0);
+  return "Cluster " + s;
+}
+/** Read a positive integer out of a number input; blank/garbage falls back to `dflt` */
+function readInt(id, dflt, min = 1){
+  const v = Math.round(+$(id).value);
+  return Number.isFinite(v) && v >= min ? v : dflt;
+}
+/** Distinct coordinates — the REAL cap on K: identical points always share a nearest centroid, so
+    K copies of one coordinate can never be split into K clusters. Memoised on (array identity, length)
+    because syncBounds() runs every frame and the point count is unbounded; every path that changes the
+    data either replaces the array (generate / clear / erase / tests) or changes its length (pen / brush),
+    and nothing ever mutates a point's x/y in place. */
+let dpCache = { arr: null, len: -1, val: 0, seen: null };
+const dpKey = p => Math.round(p.x * 1e4) + "|" + Math.round(p.y * 1e4);
+function distinctPoints(pts = S.points){
+  if(pts !== S.points){                       // a one-off query on someone else's array — never cached
+    const seen = new Set();
+    for(const p of pts) seen.add(dpKey(p));
+    return seen.size;
+  }
+  if(dpCache.arr === pts && dpCache.len === pts.length) return dpCache.val;
+  /* PERF: memoising on (array, length) looked safe but thrashed exactly where it mattered — the brush
+     appends points on every pointer event, so the length changed every time and a full O(N) re-hash ran
+     per event. That was the single largest cost while drawing. Points are only ever APPENDED
+     (pen / brush / spray) or the whole array is replaced (generate / clear / erase), so a grown array is
+     extended in place and only a shrink or a swap pays for a rebuild. */
+  let seen = dpCache.seen, from = dpCache.len;
+  if(dpCache.arr !== pts || from < 0 || pts.length < from){ seen = new Set(); from = 0; }
+  for(let i = from; i < pts.length; i++) seen.add(dpKey(pts[i]));
+  dpCache = { arr: pts, len: pts.length, val: seen.size, seen };
+  return seen.size;
+}
+/** How many clusters the current data can actually support — distinct positions, not the raw count */
+const kCap = () => distinctPoints();
+/** Is the requested K runnable on the current data? (the N ≥ K rule) */
+const kFeasible = () => kCap() >= S.k && S.k >= KMIN;
+
+const EPS    = 1e-6;            // convergence threshold (logical units)
+const SPEEDS = [900, 480, 240, 60];
+const SPDLBL = ["Slow","Normal","Fast","Instant"];
+const LY     = 100;             // logical height, fixed at 100 units
+let   LX     = 160;             // logical width — follows the canvas aspect ratio (same scale on both axes)
+
+/* ======================= STATE ======================= */
+const S = {
+  points: [], centroids: [],
+  k: 3, phase: "idle", iter: 0, sse: null, maxMove: null,
+  history: [], running: false, animating: false, initMethod: "random", speed: 1,
+  emptyFixed: 0,
+  focus: -1                      // cluster index the canvas is focused on, -1 = showing everything
+};
+
+window.S = S;   // expose state for debugging / automated verification
+
+/* ======================= DOM ======================= */
+/* PERF: sync() touches ~25 elements and used to run on every pointermove, so every one of those was a
+   fresh getElementById. The ids are static for the life of the page, so the lookup is memoised once. */
+const _els = new Map();
+const $ = id => {
+  let e = _els.get(id);
+  if(e === undefined){ e = document.getElementById(id); _els.set(id, e); }
+  return e;
+};
+/* PERF: writing textContent/value/max unconditionally dirties layout even when the string is identical.
+   These guards make a no-op sync() genuinely free. */
+const setText = (el, v) => { if(el._t !== v){ el._t = v; el.textContent = v; } };
+const setAttr = (el, k, v) => { const c = "_a" + k; if(el[c] !== v){ el[c] = v; el[k] = v; } };
+const canvas = $("canvas"), ctx = canvas.getContext("2d");
+const chart  = $("chart"),  cctx = chart.getContext("2d");
+let cw = 0, ch = 0, plotW = 0, plotH = 0, unit = 1, ox = 0, oy = 0;
+
+/* ======================= GEOMETRY + VIEW (pan / zoom) ======================= */
+const ZMIN = 0.05, ZMAX = 8;
+const V = { z: 1, px: 0, py: 0 };        // z = zoom, px/py = pan offset in screen pixels
+S.view = V;
+
+const sc = () => unit * V.z;             // pixels per logical unit, zoom included
+const px = p => ({ x: ox + p.x * sc() + V.px, y: oy + plotH - p.y * sc() + V.py });
+const toLogical = (mx, my) => ({ x: (mx - ox - V.px) / sc(), y: (plotH - (my - oy - V.py)) / sc() });
+const d2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+
+/* The canvas is infinite: there is no world boundary, so nothing clamps the pan and no
+   position is ever "out of bounds". Points are culled per frame in screen space instead. */
+/* Mirror the view state onto the DOM so external tests can read it without touching internals */
+function markView(){
+  canvas.dataset.view = V.z.toFixed(3) + "," + V.px.toFixed(1) + "," + V.py.toFixed(1);
+  invalidate();                        // the view moved, so the canvas needs a repaint
+}
+/* Zoom while keeping the point under the cursor pinned in place */
+function zoomAt(mx, my, factor){
+  const w = toLogical(mx, my);
+  const z2 = Math.min(ZMAX, Math.max(ZMIN, V.z * factor));
+  if(Math.abs(z2 - V.z) < 1e-9) return;
+  V.z = z2;
+  V.px = mx - ox - w.x * sc();
+  V.py = my - (oy + plotH) + w.y * sc();
+  syncView();
+}
+function resetView(){ V.z = 1; V.px = 0; V.py = 0; syncView(); }
+
+function focusView(){
+  const all = [...S.points, ...S.centroids];
+  if(!all.length){ resetView(); return; }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for(const p of all){
+    if(p.x < minX) minX = p.x; if(p.x > maxX) maxX = p.x;
+    if(p.y < minY) minY = p.y; if(p.y > maxY) maxY = p.y;
+  }
+  const pdX = (maxX - minX) * 0.1 || 10, pdY = (maxY - minY) * 0.1 || 10;
+  minX -= pdX; maxX += pdX; minY -= pdY; maxY += pdY;
+  
+  const zx = plotW / ((maxX - minX) * unit), zy = plotH / ((maxY - minY) * unit);
+  V.z = Math.min(ZMAX, Math.max(ZMIN, Math.min(zx, zy)));
+  
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  V.px = plotW / 2 - cx * sc();
+  V.py = cy * sc() - plotH / 2;
+  markView(); syncView();
+}
+
+function syncView(){ $("lblZoom").textContent = Math.round(V.z * 100) + "%"; markView(); }
+
+/* ======================= CLUSTER CLICK-TO-FOCUS =======================
+   Memory/cluster_focus_feature.md — clicking a cluster on the status bar flies the
+   view to that cluster's points and dims the rest; clicking it again flies back out. */
+const FOCUSMS = 500, FOCUSPAD = 0.15, DIMALPHA = 0.2, FOCUSZMAX = 4;
+let focusGen = 0;                // bumped by every new tween, so a superseded one stops itself
+                                 // (cancelAnimationFrame alone is not enough — a queued frame can still fire)
+
+/** World bounding box of one cluster's points, or null when it has none */
+function clusterBox(i){
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, n = 0;
+  for(const p of S.points){
+    if(p.c !== i) continue;
+    n++;
+    if(p.x < minX) minX = p.x; if(p.x > maxX) maxX = p.x;
+    if(p.y < minY) minY = p.y; if(p.y > maxY) maxY = p.y;
+  }
+  return n ? { minX, maxX, minY, maxY, n } : null;
+}
+/** The {z, px, py} that fits a world box into the viewport with padding */
+function viewFor(minX, maxX, minY, maxY, pad = FOCUSPAD, zCap = ZMAX){
+  const pdX = (maxX - minX) * pad || 10, pdY = (maxY - minY) * pad || 10;
+  minX -= pdX; maxX += pdX; minY -= pdY; maxY += pdY;
+  const zx = plotW / ((maxX - minX) * unit), zy = plotH / ((maxY - minY) * unit);
+  const z = Math.min(ZMAX, zCap, Math.max(ZMIN, Math.min(zx, zy)));
+  const s = unit * z, cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  return { z, px: plotW / 2 - cx * s, py: cy * s - plotH / 2 };
+}
+/** Box around everything on the canvas — what "zoomed out" means */
+function allBox(){
+  const all = [...S.points, ...S.centroids];
+  if(!all.length) return null;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for(const p of all){
+    if(p.x < minX) minX = p.x; if(p.x > maxX) maxX = p.x;
+    if(p.y < minY) minY = p.y; if(p.y > maxY) maxY = p.y;
+  }
+  return { minX, maxX, minY, maxY };
+}
+/** Smooth pan + zoom to a view, easeInOutCubic over FOCUSMS. A newer call supersedes this one. */
+function tweenView(to){
+  const gen = ++focusGen;
+  const from = { z: V.z, px: V.px, py: V.py }, t0 = performance.now();
+  const tick = now => {
+    if(gen !== focusGen) return;                       // retargeted mid-flight — abandon this chain
+    const t = Math.min(1, (now - t0) / FOCUSMS);
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;   // easeInOutCubic
+    V.z  = from.z  + (to.z  - from.z)  * e;
+    V.px = from.px + (to.px - from.px) * e;
+    V.py = from.py + (to.py - from.py) * e;
+    syncView(); invalidate();          // PERF: was render() - a second full repaint on top of the loop's own
+    if(t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+/** Click a cluster on the status bar: focus it, or unfocus if it is already the focused one */
+function focusCluster(i){
+  if(i < 0 || i >= S.centroids.length) return false;
+  if(S.focus === i){ clearFocus(); return true; }      // second click on the same cluster → back out
+  const box = clusterBox(i);
+  if(!box){ say(nameFor(i) + " has no points yet — nothing to focus on"); return false; }
+  S.focus = i;
+  sync();
+  tweenView(viewFor(box.minX, box.maxX, box.minY, box.maxY, FOCUSPAD, FOCUSZMAX));
+  say("Focused on " + nameFor(i) + " — " + box.n + " point" + (box.n === 1 ? "" : "s")
+      + " · other clusters dimmed · click it again to zoom back out");
+  return true;
+}
+/** Drop the focus and fly back to the overview */
+function clearFocus(animate = true){
+  if(S.focus < 0) return false;
+  S.focus = -1;
+  sync();
+  const b = allBox();
+  if(animate && b) tweenView(viewFor(b.minX, b.maxX, b.minY, b.maxY, 0.1));
+  return true;
+}
+
+function resize(){
+  const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.max(1, Math.round(r.width * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cw = r.width; ch = r.height;
+
+  const padX = 30, padY = 24;
+  plotW = Math.max(60, cw - padX * 2);
+  plotH = Math.max(60, ch - padY * 2);
+  ox = padX; oy = padY;
+  unit = plotH / LY;              // pixels per logical unit — identical on both axes
+  LX   = plotW / unit;            // so the logical width stretches with the available space
+  markView();                     // infinite canvas: resizing never moves data or the pan
+
+  const cr = chart.getBoundingClientRect();
+  chart.width  = Math.max(1, Math.round(cr.width * dpr));
+  chart.height = Math.max(1, Math.round(cr.height * dpr));
+  cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvasRect = null;                // the cached pointer-mapping rect is stale now
+  lastChartSig = null;              // the chart bitmap was just cleared, so let sync() repaint it
+}
+
+/* ======================= DATA GENERATION ======================= */
+const rnd = (a, b) => a + Math.random() * (b - a);
+function gauss(){
+  let u = 0, v = 0;
+  while(!u) u = Math.random();
+  while(!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+const clampPt = p => ({ x: Math.min(LX - 2, Math.max(2, p.x)), y: Math.min(98, Math.max(2, p.y)), c: -1 });
+/* Split n into parts that sum to EXACTLY n (largest-remainder). Feedback 5: the theory rule is
+   stated against N, so "roughly n" is not good enough — asking for n = 5 and getting 4 silently
+   changes whether K = 5 is legal. */
+function split(n, w){
+  const tot = w.reduce((a, b) => a + b, 0);
+  const exact = w.map(x => n * x / tot);
+  const out = exact.map(Math.floor);
+  let rest = n - out.reduce((a, b) => a + b, 0);
+  const order = exact.map((e, i) => ({ i, f: e - Math.floor(e) })).sort((a, b) => b.f - a.f);
+  for(let j = 0; rest > 0; j++, rest--) out[order[j % order.length].i]++;
+  return out;
+}
+function blob(cx, cy, sd, n, out){
+  for(let i = 0; i < n; i++) out.push(clampPt({ x: cx + gauss() * sd, y: cy + gauss() * sd }));
+}
+/* Blob spread, scaled to both the height and the gap between blob centres */
+function sdFor(g){
+  return Math.min(LY * 0.125, (LX * 0.68) / Math.max(1, g - 1) * 0.28);
+}
+function spreadCenters(g){
+  const best = [];
+  for(let i = 0; i < g; i++){
+    let bp = null, bd = -1;
+    for(let t = 0; t < 300; t++){
+      const p = { x: rnd(LX * 0.16, LX * 0.84), y: rnd(16, 84) };
+      let dm = Infinity;                       // PERF: was Math.min(...best.map(...)) — an array per candidate
+      for(let q = 0; q < best.length; q++){ const d = d2(best[q], p); if(d < dm) dm = d; }
+      if(dm > bd){ bd = dm; bp = p; }
+    }
+    best.push(bp);
+  }
+  return best;
+}
+
+function generate(){
+  const n = readInt("inN", 150), kind = $("inData").value, pts = [];
+  if(n < S.k){                                     // Task 4: belt-and-braces — the button is disabled too
+    say(`⚠️ Need n ≥ K — n = ${n} is less than K = ${S.k}. Increase n or lower K.`);
+    sync(); return;
+  }
+  if(kind === "blobs"){
+    /* one blob per cluster the user asked for, but never more blobs than points */
+    const g = Math.max(1, Math.min(8, S.k, n)), cs = spreadCenters(g), sd = sdFor(g);
+    const cnt = split(n, new Array(g).fill(1));
+    for(let i = 0; i < g; i++) blob(cs[i].x, cs[i].y, sd, cnt[i], pts);
+  } else if(kind === "sizes"){
+    const cs = spreadCenters(3), w = [0.08, 0.25, 0.67], sd = sdFor(3) * 0.95;
+    const cnt = split(n, w);
+    for(let i = 0; i < 3; i++) blob(cs[i].x, cs[i].y, sd, cnt[i], pts);
+  } else if(kind === "density"){
+    const cs = spreadCenters(3), b = sdFor(3), sd = [b * 0.34, b, b * 2.1];
+    const cnt = split(n, [1, 1, 1]);
+    for(let i = 0; i < 3; i++) blob(cs[i].x, cs[i].y, sd[i], cnt[i], pts);
+  } else if(kind === "rings"){
+    const half = split(n, [1, 1])[0], R = Math.min(LX, LY) / 2, cx = LX / 2, cy = LY / 2;
+    for(let i = 0; i < half; i++){
+      const a = rnd(0, Math.PI * 2), r = rnd(0, R * 0.24);
+      pts.push(clampPt({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }));
+    }
+    for(let i = 0; i < n - half; i++){
+      const a = rnd(0, Math.PI * 2), r = rnd(R * 0.70, R * 0.88);
+      pts.push(clampPt({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }));
+    }
+  } else {
+    const cs = spreadCenters(3);
+    const strays = Math.min(n, Math.max(1, Math.min(8, Math.round(n * 0.06))));
+    const cnt = split(n - strays, [1, 1, 1]);
+    for(let i = 0; i < 3; i++) blob(cs[i].x, cs[i].y, sdFor(3) * 0.8, cnt[i], pts);
+    for(let i = 0; i < strays; i++) pts.push(clampPt({ x: rnd(3, LX - 3), y: rnd(3, 97) }));
+  }
+  S.points = pts;
+  hardReset();
+  say(`Generated ${pts.length} points (${$("inData").selectedOptions[0].text.split(" —")[0]}) — press Initialize Centroids`);
+}
+
+/* ======================= K-MEANS CORE ======================= */
+function pickInitial(points, k, method){
+  k = Math.max(KMIN, Math.min(k, points.length));   // K ≤ N — never spin looking for more points than exist
+  if(method === "farthest"){
+    /* PERF: this rebuilt the distance to every already-chosen centroid for every point, allocating a
+       throwaway array per point — O(K^2 . N) with K.N allocations, and the reason Initialize stalled on
+       a big canvas. Carrying a running nearest-distance per point makes it O(K . N) with no allocation.
+       The scan order and the strict > tie-break are unchanged, so it picks exactly the same centroids. */
+    const first = points[Math.floor(Math.random() * points.length)];
+    const chosen = [first], near = new Float64Array(points.length);
+    for(let j = 0; j < points.length; j++) near[j] = d2(first, points[j]);
+    while(chosen.length < k){
+      let bi = 0, bd = -1;
+      for(let j = 0; j < points.length; j++) if(near[j] > bd){ bd = near[j]; bi = j; }
+      const p = points[bi];
+      chosen.push(p);
+      for(let j = 0; j < points.length; j++){ const d = d2(p, points[j]); if(d < near[j]) near[j] = d; }
+    }
+    return chosen.map(p => ({ x: p.x, y: p.y }));
+  }
+  const idx = new Set();
+  while(idx.size < k) idx.add(Math.floor(Math.random() * points.length));
+  return [...idx].map(i => ({ x: points[i].x, y: points[i].y }));
+}
+
+function assignAll(points, cents){
+  let sse = 0, changed = 0;
+  const K = cents.length;                       // PERF: the innermost loop of the whole app (N x K per step)
+  for(let j = 0; j < points.length; j++){
+    const p = points[j];
+    let bi = 0, bd = Infinity;
+    for(let i = 0; i < K; i++){
+      const c = cents[i], dx = p.x - c.x, dy = p.y - c.y, d = dx * dx + dy * dy;
+      if(d < bd){ bd = d; bi = i; }
+    }
+    if(p.c !== bi) changed++;
+    p.c = bi; sse += bd;
+  }
+  return { sse, changed };
+}
+
+/* Empty cluster → keep the old centroid so nothing turns into NaN */
+/* Task 6: a cluster can come out empty even when K ≤ N — Lloyd's gives no guarantee. Dividing a zero
+   count would give NaN, so an empty centroid is re-seeded onto the point currently worst served (the one
+   furthest from its own centroid), which is the standard repair and drives SSE down.
+   Two guards keep the repair from doing harm: a point is claimed at most once, so two empty clusters
+   never land on the same coordinate; and only clusters with at least two members may donate, so fixing
+   one empty cluster can never empty another. With nothing to spare the centroid simply holds its
+   position — the original no-NaN behaviour. */
+let lastEmptyFixed = 0;
+function meanUpdate(points, cents){
+  const sx = new Array(cents.length).fill(0),
+        sy = new Array(cents.length).fill(0),
+        n  = new Array(cents.length).fill(0);
+  for(const p of points){
+    if(p.c < 0) continue;
+    sx[p.c] += p.x; sy[p.c] += p.y; n[p.c]++;
+  }
+  const out = cents.map((c, i) => n[i] ? { x: sx[i] / n[i], y: sy[i] / n[i] } : { x: c.x, y: c.y });
+  lastEmptyFixed = 0;
+  const taken = new Set(), left = n.slice();
+  for(let i = 0; i < cents.length; i++){
+    if(n[i]) continue;
+    let far = -1, fd = -1;
+    for(let j = 0; j < points.length; j++){
+      const p = points[j];
+      if(p.c < 0 || taken.has(j) || left[p.c] < 2) continue;
+      const c = cents[p.c], d = (p.x - c.x) ** 2 + (p.y - c.y) ** 2;
+      if(d > fd){ fd = d; far = j; }
+    }
+    if(far < 0) continue;                          // nothing to spare — hold position, still finite
+    taken.add(far); left[points[far].c]--;
+    out[i] = { x: points[far].x, y: points[far].y };
+    lastEmptyFixed++;
+  }
+  return out;
+}
+
+/* Run k-means to completion silently (no animation) — used by Best-of-N */
+function silentRun(src, k, method, maxIt = 100){
+  const pts = src.map(p => ({ x: p.x, y: p.y, c: -1 }));
+  let cents = pickInitial(pts, k, method), sse = 0;
+  for(let it = 0; it < maxIt; it++){
+    sse = assignAll(pts, cents).sse;
+    const nc = meanUpdate(pts, cents);
+    let mv = 0;                                 // PERF: a spread over K args allocates, and throws outright past ~65k
+    for(let i = 0; i < nc.length; i++){
+      const d = Math.hypot(nc[i].x - cents[i].x, nc[i].y - cents[i].y);
+      if(d > mv) mv = d;
+    }
+    cents = nc;
+    if(mv < EPS){ sse = assignAll(pts, cents).sse; break; }
+  }
+  return { labels: pts.map(p => p.c), cents, sse };
+}
+
+/* ======================= STEP MACHINE ======================= */
+function doInit(){
+  S.k = readInt("inK", S.k);
+  if(!kFeasible()){                                  // the one hard rule: 1 ≤ K ≤ distinct(N)
+    const dp = kCap(), N = S.points.length;
+    say(dp < N
+      ? `⚠️ K = ${S.k} needs ${S.k} DISTINCT positions — there are ${N} points but only ${dp} distinct. Identical points always share a nearest centroid, so they can never be split apart.`
+      : `⚠️ K = ${S.k} needs at least ${S.k} data points — there are ${N}. K-means requires K ≤ N.`);
+    sync(); return;
+  }
+  S.initMethod = $("inInit").value;
+  S.focus = -1;                                    // re-running k-means resets the focus (feature spec)
+  S.points.forEach(p => p.c = -1);
+  S.centroids = pickInitial(S.points, S.k, S.initMethod)
+                  .map(c => ({ x: c.x, y: c.y, ax: c.x, ay: c.y, trail: [{ x: c.x, y: c.y }] }));
+  S.phase = "assign"; S.iter = 0; S.sse = null; S.maxMove = null; S.history = [];
+  say((S.initMethod === "farthest"
+      ? "Initial centroids chosen farthest-first — the starting points are as far apart as possible"
+      : "Initial centroids sampled at random — press again a few times and the outcome changes"));
+  sync();
+}
+
+function doAssign(){
+  const r = assignAll(S.points, S.centroids);
+  S.sse = r.sse; S.phase = "update";
+  if(S.history.length === 0) S.history.push(S.sse);   // baseline before the centroids move at all
+  say(`Assign: attached ${S.points.length} points to their nearest centroid (${r.changed} changed cluster)`);
+  sync();
+  return Promise.resolve();
+}
+
+function doUpdate(){
+  const nc = meanUpdate(S.points, S.centroids);
+  const fixed = lastEmptyFixed;
+  S.emptyFixed += fixed;
+  let mv = 0;                                   // PERF: same spread, same reason — see silentRun
+  for(let i = 0; i < nc.length; i++){
+    const d = Math.hypot(nc[i].x - S.centroids[i].x, nc[i].y - S.centroids[i].y);
+    if(d > mv) mv = d;
+  }
+  S.maxMove = mv;
+  S.iter++;
+  const done = S.maxMove < EPS;
+  const p = animateTo(nc).then(() => {
+    S.sse = assignAll(S.points, S.centroids).sse;
+    S.history.push(S.sse);
+    S.phase = done ? "done" : "assign";
+    say(done
+      ? `✅ Converged! the centroids stopped moving (${S.iter} iterations, SSE = ${S.sse.toFixed(2)})`
+      : `Update: moved each centroid to its cluster mean (largest move ${S.maxMove.toFixed(3)} units)`
+        + (fixed ? ` · ♻️ ${fixed} empty cluster${fixed === 1 ? "" : "s"} re-seeded onto the worst-served points (${S.emptyFixed} so far)` : ""));
+    sync();
+  });
+  sync();
+  return p;
+}
+
+function nextStep(){
+  if(S.centroids.length === 0){ doInit(); return Promise.resolve(); }
+  if(S.phase === "assign") return doAssign();
+  if(S.phase === "update") return doUpdate();
+  say("The algorithm has converged — press Reset or generate new data to start another run");
+  return Promise.resolve();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function runToCompletion(){
+  if(S.running){ S.running = false; return; }
+  if(S.centroids.length === 0) doInit();
+  if(S.centroids.length === 0) return;
+  S.running = true; sync();
+  let guard = 0;
+  while(S.running && S.phase !== "done" && guard++ < 300){
+    await nextStep();
+    if(S.phase === "done") break;
+    await sleep(Math.max(40, SPEEDS[S.speed] * 0.35));
+  }
+  S.running = false; sync();
+}
+
+function bestOfN(n = 10){
+  S.k = readInt("inK", S.k);
+  if(!kFeasible()){
+    say(`⚠️ K = ${S.k} needs at least ${S.k} data points — there are ${S.points.length}. K-means requires K ≤ N.`);
+    sync(); return;
+  }
+  let best = null, worst = -Infinity;
+  for(let i = 0; i < n; i++){
+    const r = silentRun(S.points, S.k, $("inInit").value);
+    if(!best || r.sse < best.sse) best = r;
+    if(r.sse > worst) worst = r.sse;
+  }
+  S.points.forEach((p, i) => p.c = best.labels[i]);
+  S.centroids = best.cents.map(c => ({ x: c.x, y: c.y, ax: c.x, ay: c.y, trail: [{ x: c.x, y: c.y }] }));
+  S.sse = best.sse; S.phase = "done"; S.maxMove = 0; S.history = [best.sse];
+  say(`🏆 Ran ${n} times and kept the lowest SSE: ${best.sse.toFixed(2)} (worst seen ${worst.toFixed(2)}) — initialization clearly changes the answer`);
+  sync();
+}
+
+/* ======================= ANIMATION ======================= */
+function animateTo(target){
+  const dur = SPEEDS[S.speed];
+  const from = S.centroids.map(c => ({ x: c.x, y: c.y }));
+  S.centroids.forEach((c, i) => c.trail.push({ x: target[i].x, y: target[i].y }));
+  S.animating = true;
+  if(dur <= 60){
+    S.centroids.forEach((c, i) => { c.x = c.ax = target[i].x; c.y = c.ay = target[i].y; });
+    S.animating = false;
+    return Promise.resolve();
+  }
+  return new Promise(res => {
+    const t0 = performance.now();
+    (function tick(now){
+      const t = Math.min(1, (now - t0) / dur);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;   // easeInOutCubic
+      S.centroids.forEach((c, i) => {
+        c.ax = from[i].x + (target[i].x - from[i].x) * e;
+        c.ay = from[i].y + (target[i].y - from[i].y) * e;
+      });
+      invalidate();                    // the centroids moved this frame
+      if(t < 1) requestAnimationFrame(tick);
+      else {
+        S.centroids.forEach((c, i) => { c.x = c.ax = target[i].x; c.y = c.ay = target[i].y; });
+        S.animating = false; res();
+      }
+    })(t0);
+  });
+}
+
+/* ======================= RENDER ======================= */
+const TAU = Math.PI * 2;
+/* Reused across frames so the hot loop never allocates - see the note in render() */
+const bucket = new Map();
+function drawGrid(){
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = "#080d1c"; ctx.fillRect(0, 0, cw, ch);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(ox, oy, plotW, plotH); ctx.clip();
+
+  ctx.fillStyle = "#0a1123"; ctx.fillRect(ox, oy, plotW, plotH);
+
+  ctx.strokeStyle = "rgba(255,255,255,.045)"; ctx.lineWidth = 1;
+  const step = V.z >= 3 ? 2 : V.z >= 1.6 ? 5 : 10;
+
+  const la = toLogical(ox, oy + plotH);
+  const lb = toLogical(ox + plotW, oy);
+  /* PERF: every grid line used to be its own beginPath/stroke pair plus a throwaway {x,y} from px().
+     One path for the lot is a single rasterisation instead of ~60, and the transform is inlined. */
+  const gs = sc(), gbx = ox + V.px, gby = oy + plotH + V.py;
+  ctx.beginPath();
+  const startX = Math.floor(la.x / step) * step;
+  const endX = Math.ceil(lb.x / step) * step;
+  for(let gx = startX; gx <= endX; gx += step){
+    const x = gbx + gx * gs;
+    ctx.moveTo(x, oy + plotH); ctx.lineTo(x, oy);
+  }
+  const startY = Math.floor(la.y / step) * step;
+  const endY = Math.ceil(lb.y / step) * step;
+  for(let gy = startY; gy <= endY; gy += step){
+    const y = gby - gy * gs;
+    ctx.moveTo(ox, y); ctx.lineTo(ox + plotW, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = "#54628a"; ctx.font = "10px 'JetBrains Mono', monospace";
+  ctx.fillText(la.x.toFixed(0), ox - 3, oy + plotH + 15);
+  ctx.fillText("x →", ox + plotW / 2 - 8, oy + plotH + 15);
+  ctx.fillText(lb.x.toFixed(0), ox + plotW - 18, oy + plotH + 15);
+  ctx.save();
+  ctx.translate(ox - 10, oy + plotH / 2 + 10); ctx.rotate(-Math.PI / 2);
+  ctx.fillText("y →", 0, 0);
+  ctx.restore();
+}
+
+/* PERF - THE BIG ONE. render() used to end with an unconditional requestAnimationFrame(render), so the
+   page repainted the whole canvas 60 times a second forever: idle tab, no animation, nobody touching it.
+   That is the resource-drain half of feedback 8 - a pegged core, a spinning fan and a flat battery for
+   nothing. Painting is now demand-driven: invalidate() marks the canvas dirty and wakes the loop, and the
+   loop puts itself back to sleep the moment there is nothing left to draw. Every site that changes
+   something visible calls invalidate() - chiefly sync() and markView(), which between them already gate
+   every state and view change - and the loop keeps itself turning unaided while an animation or a drag
+   is live, so a missed invalidate mid-interaction cannot strand a stale frame. */
+let dirty = true, rafId = 0;
+function invalidate(){
+  dirty = true;
+  if(!rafId) rafId = requestAnimationFrame(frame);
+}
+function frame(){
+  rafId = 0;
+  if(dirty){ dirty = false; render(); }
+  if(busy() || mode) invalidate();     // a running animation or a live drag keeps the loop turning
+}
+
+let paints = 0;
+function render(){
+  if(cw === 0) resize();
+  /* Mirror the repaint count onto the DOM, the same way markView() mirrors the view: it is the only way
+     a real-browser test can show that an idle page now paints ZERO frames where it used to paint 60 a
+     second. One attribute write on a frame we were drawing anyway. */
+  canvas.dataset.paints = ++paints;
+  drawGrid();
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(ox, oy, plotW, plotH); ctx.clip();   // everything in data space is clipped to the viewport
+
+  const N = S.points.length;
+  /* PERF: two px() objects AND a fresh "#rrggbb33" string per point per frame. The transform is inlined
+     and the faded colours are built once per cluster instead of once per point. */
+  const s = sc(), bx = ox + V.px, by = oy + plotH + V.py;
+  if($("cbLines").checked && S.centroids.length && N <= LINEMAX){
+    ctx.lineWidth = 1;
+    const faded = S.centroids.map((c, i) => colorFor(i) + "33");
+    for(let j = 0; j < N; j++){
+      const p = S.points[j];
+      if(p.c < 0) continue;
+      const c = S.centroids[p.c];
+      if(!c) continue;
+      ctx.strokeStyle = faded[p.c];
+      ctx.beginPath();
+      ctx.moveTo(bx + p.x * s, by - p.y * s);
+      ctx.lineTo(bx + c.ax * s, by - c.ay * s);
+      ctx.stroke();
+    }
+  }
+
+  /* Data points: one path per colour, cull anything off-view, shrink the dot as the count grows
+     — that is what makes an unlimited number of points affordable per frame */
+  const R = N > 12000 ? 2 : N > 4000 ? 2.6 : N > 1500 ? 3.2 : 4;
+  const outline = N <= LINEMAX;
+  /* PERF: px() minted a fresh {x,y} for every point, and the per-colour buckets were brand-new arrays of
+     those objects, every frame. At 20k points that is over a million short-lived objects a second, and
+     the GC pauses are exactly the stutter you feel while drawing. The buckets are module-level and reused
+     - only their fill level is reset - so a steady-state frame allocates nothing at all. */
+  const x0 = ox - R, x1 = ox + plotW + R, y0 = oy - R, y1 = oy + plotH + R;
+  /* Reusing the buffers must not turn into hoarding them: if K has come down, drop the whole cache
+     rather than keeping a full-size xs/ys pair for every colour the page has ever shown. */
+  if(bucket.size > S.centroids.length + 2) bucket.clear();
+  else for(const b of bucket.values()) b.n = 0;
+  for(let j = 0; j < N; j++){
+    const p = S.points[j];
+    const sx = bx + p.x * s;
+    if(sx < x0 || sx > x1) continue;
+    const sy = by - p.y * s;
+    if(sy < y0 || sy > y1) continue;
+    const col = colorFor(p.c);
+    let b = bucket.get(col);
+    if(b === undefined){ b = { xs: [], ys: [], n: 0 }; bucket.set(col, b); }
+    b.xs[b.n] = sx; b.ys[b.n] = sy; b.n++;
+  }
+  const focusCol = S.focus >= 0 ? colorFor(S.focus) : null;   // focused cluster stays solid, the rest fade
+  for(const [col, b] of bucket){
+    if(!b.n) continue;                                        // a colour with nothing on screen draws nothing
+    ctx.globalAlpha = focusCol && col !== focusCol ? DIMALPHA : 1;
+    ctx.beginPath();
+    for(let i = 0; i < b.n; i++){ ctx.moveTo(b.xs[i] + R, b.ys[i]); ctx.arc(b.xs[i], b.ys[i], R, 0, TAU); }
+    ctx.fillStyle = col; ctx.fill();
+    if(outline){ ctx.lineWidth = 1; ctx.strokeStyle = "rgba(8,13,28,.85)"; ctx.stroke(); }
+  }
+  ctx.globalAlpha = 1;
+
+  if($("cbTrail").checked){
+    ctx.setLineDash([4, 4]); ctx.lineWidth = 1.4;
+    S.centroids.forEach((c, i) => {
+      if(c.trail.length < 2) return;
+      ctx.strokeStyle = colorFor(i) + "88";
+      ctx.beginPath();
+      c.trail.forEach((t, j) => { const q = px(t); j ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y); });
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+  }
+
+  S.centroids.forEach((c, i) => {
+    const a = px({ x: c.ax, y: c.ay }), col = colorFor(i);
+    if(i === S.sel || i === hoverC){                       // the selected / hovered centroid
+      ctx.beginPath(); ctx.arc(a.x, a.y, 20, 0, Math.PI * 2);
+      ctx.strokeStyle = i === S.sel ? "#fbbf24" : "rgba(255,255,255,.5)";
+      ctx.lineWidth = 1.6; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.beginPath(); ctx.arc(a.x, a.y, 15, 0, Math.PI * 2); ctx.fillStyle = col + "22"; ctx.fill();
+    ctx.beginPath(); ctx.arc(a.x, a.y, 11, 0, Math.PI * 2);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(a.x, a.y, 7.5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+    ctx.strokeStyle = "rgba(8,13,28,.9)"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(a.x - 4, a.y); ctx.lineTo(a.x + 4, a.y);
+    ctx.moveTo(a.x, a.y - 4); ctx.lineTo(a.x, a.y + 4);
+    ctx.stroke();
+  });
+
+  if(hoverPt && !busy() && (S.tool === "pen" || S.tool === "brush" || S.tool === "eraser" || S.tool === "spray")){
+    const er = S.tool === "eraser", R = S.tool === "pen" ? 3.5 : brushR();
+    const bx = stroke.on ? stroke.sx : hoverPt.x;               // mid-stroke the head lags behind the hand
+    const by = stroke.on ? stroke.sy : hoverPt.y;
+    if(stroke.on && Math.hypot(hoverPt.x - bx, hoverPt.y - by) > 1){
+      ctx.beginPath(); ctx.moveTo(hoverPt.x, hoverPt.y); ctx.lineTo(bx, by);   // leash line showing the stabilizer lag
+      ctx.strokeStyle = "rgba(226,232,240,.3)"; ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2);
+    ctx.fillStyle = er ? "rgba(248,113,113,.07)" : "rgba(226,232,240,.05)"; ctx.fill();
+    ctx.strokeStyle = er ? "rgba(248,113,113,.85)" : "rgba(226,232,240,.7)";
+    ctx.lineWidth = 1.4;
+    if(S.tool !== "pen") ctx.setLineDash([5, 4]);
+    ctx.stroke(); ctx.setLineDash([]);
+    if(mode === "spray"){                                        // spraying: inner dot marks the cone centre
+      ctx.beginPath(); ctx.arc(bx, by, Math.max(2, R * 0.18), 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(226,232,240,.45)"; ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawChart(){
+  const cr = chart.getBoundingClientRect();
+  const w = cr.width, h = cr.height, H = S.history;
+  if(w < 2 || h < 2) return;
+  cctx.clearRect(0, 0, w, h);
+  if(H.length < 1){ $("histTxt").textContent = "No data yet"; return; }
+  const mx = Math.max(...H), mn = Math.min(...H), rg = (mx - mn) || 1;
+  const X = i => 6 + (H.length === 1 ? 0 : i / (H.length - 1) * (w - 12));
+  const Y = v => h - 16 - (v - mn) / rg * (h - 28);
+  cctx.strokeStyle = "rgba(255,255,255,.07)"; cctx.lineWidth = 1;
+  for(let i = 0; i <= 3; i++){
+    const y = 8 + i * (h - 24) / 3;
+    cctx.beginPath(); cctx.moveTo(6, y); cctx.lineTo(w - 6, y); cctx.stroke();
+  }
+  cctx.strokeStyle = "#34d399"; cctx.lineWidth = 2; cctx.beginPath();
+  H.forEach((v, i) => i ? cctx.lineTo(X(i), Y(v)) : cctx.moveTo(X(i), Y(v)));
+  cctx.stroke();
+  cctx.fillStyle = "#34d399";
+  H.forEach((v, i) => { cctx.beginPath(); cctx.arc(X(i), Y(v), 2.6, 0, Math.PI * 2); cctx.fill(); });
+  if(H.length === 1){
+    $("histTxt").innerHTML = `SSE <span class="mono">${H[0].toFixed(1)}</span> · single result (no convergence curve yet)`;
+    return;
+  }
+  const drop = ((H[0] - H[H.length - 1]) / H[0] * 100).toFixed(1);
+  $("histTxt").innerHTML =
+    `${H.length} samples · SSE <span class="mono">${H[0].toFixed(1)} → ${H[H.length - 1].toFixed(1)}</span> (down ${drop}%)`;
+}
+
+/* ======================= UI SYNC =======================
+   PERF: sync() runs after every state change, and while the brush is down that means on every single
+   pointermove. It used to re-query the DOM, rebuild the legend's innerHTML and repaint the SSE chart
+   each time. The queries below are hoisted (both node lists are static markup), and the expensive
+   writes are guarded so an unchanged value costs a string compare instead of a layout. */
+const PCLINES = document.querySelectorAll(".pc");
+const TOOLBTNS = document.querySelectorAll(".tool");
+let lastLegend = null, lastChartSig = null;
+
+const PHASE = {
+  idle:   { name:"Waiting for data", dot:"bg-slate-500", line:0,
+            title:"Not started",
+            desc:"Press “New random data”, or draw points on the canvas yourself, then press Initialize Centroids to start the algorithm." },
+  ready:  { name:"Ready to start", dot:"bg-blue-400", line:1,
+            title:"Step 1 — Initialization",
+            desc:"K-means needs the number of clusters K up front, then picks K starting points as centroids. Because those starting points are random, each run can land somewhere different." },
+  assign: { name:"Next: Assign", dot:"bg-amber-400", line:3,
+            title:"Step 2 — Assignment",
+            desc:"Every data point joins the cluster of its nearest centroid, measured by Euclidean distance — the thin lines on the canvas show that membership.",
+            math:"c(x) = argmin_i ‖x − c_i‖²" },
+  update: { name:"Next: Update", dot:"bg-fuchsia-400", line:4,
+            title:"Step 3 — Update",
+            desc:"Each centroid moves to the mean of its members. Watch the animated move and the dashed trail it leaves behind.",
+            math:"c_i = (1/|C_i|) · Σ_{x∈C_i} x" },
+  done:   { name:"Converged ✓", dot:"bg-emerald-400", line:5,
+            title:"Step 4 — Convergence",
+            desc:"The centroids stopped moving, so the clustering is stable and the algorithm ends. The SSE you get is a local optimum and may not be the best one — compare it against Best Centroids.",
+            math:"cost(C) = Σ_i Σ_{x∈C_i} dist(x, c_i)" }
+};
+
+function currentPhaseKey(){
+  if(S.points.length === 0) return "idle";
+  if(S.centroids.length === 0) return "ready";
+  return S.phase;
+}
+
+function sync(){
+  const info = PHASE[currentPhaseKey()];
+  setText($("phaseName"), info.name);
+  $("phaseDot").className = "w-2.5 h-2.5 rounded-full " + info.dot;
+  setText($("infoTitle"), info.title);
+  setText($("infoDesc"), info.desc);
+  const m = $("infoMath");
+  if(info.math){ setText(m, info.math); m.classList.remove("hidden"); }
+  else m.classList.add("hidden");
+
+  PCLINES.forEach(el => {
+    const n = +el.dataset.line;
+    const on = n === info.line || (info.line >= 3 && info.line <= 4 && n === 2);
+    const cls = "pc " + (on ? "on" : "off");
+    if(el.className !== cls) el.className = cls;
+  });
+
+  setText($("stCent"), S.centroids.length + " / " + S.k);
+  const noEdit = busy();
+  TOOLBTNS.forEach(b => {
+    b.classList.toggle("on", b.dataset.tool === S.tool);
+    const off = noEdit && b.dataset.tool !== "hand";         // no editing while running, but panning stays available
+    if(b.disabled !== off) b.disabled = off;
+  });
+  setText($("lnHint"), S.points.length > LINEMAX ? " · auto-off, too many points" : "");
+  const painter = S.tool === "brush" || S.tool === "eraser" || S.tool === "spray";
+  $("brushOpts").style.display = painter ? "" : "none";
+  $("randOpts").style.display  = S.tool === "random" ? "" : "none";   // n is the 🎲 tool's own option
+  $("densOpt").style.display = S.tool === "eraser" ? "none" : "";   // flow means nothing for the eraser
+  $("stabOpt").style.display = S.tool === "spray" ? "none" : "";    // the spray does not use the stabilizer
+  setText($("toolHint"), TOOLS[S.tool].hint);
+  canvas.style.cursor = mode === "pan" ? "grabbing" : TOOLS[S.tool].cursor;
+
+  setText($("stIter"), String(S.iter));
+  setText($("stN"), String(S.points.length));
+  setText($("stSSE"), S.sse == null ? "—" : S.sse.toFixed(2));
+  setText($("stMove"), S.maxMove == null ? "—" : S.maxMove.toFixed(4));
+
+  syncBounds();
+
+  const isBusy = busy(), feasible = kFeasible();
+  $("bInit").disabled = isBusy || !feasible;
+  $("bStep").disabled = isBusy || S.points.length === 0 || S.phase === "done";
+  $("bBest").disabled = isBusy || !feasible;
+  $("bGen").disabled  = isBusy || readInt("inN", 150) < S.k;   // Task 4: n ≥ K or there is nothing to generate
+  $("bClr").disabled  = isBusy;
+  setText($("bRun"), S.running ? "⏸ Stop" : "▶️ Run to Completion");
+  $("bRun").disabled = S.points.length === 0 || (S.phase === "done" && !S.running);
+
+  if(S.focus >= S.centroids.length) S.focus = -1;   // K lowered, centroid deleted, data cleared → focus drops
+  if(S.centroids.length){
+    const counts = new Array(S.centroids.length).fill(0);
+    for(const p of S.points) if(p.c >= 0 && p.c < counts.length) counts[p.c]++;
+    const shown = Math.min(S.centroids.length, LEGENDMAX);        // K is unbounded — keep the legend readable
+    let html = "";
+    for(let i = 0; i < shown; i++){
+      const cls = "cluster-status-item flex items-center gap-1.5"
+                + (S.focus === i ? " active" : "")
+                + (S.focus >= 0 && S.focus !== i ? " dimmed" : "");
+      html += `<span class="${cls}" data-cluster="${i}" role="button" tabindex="0" style="--cc:${colorFor(i)}" `
+            + `title="Click to focus the canvas on ${nameFor(i)} — click again to zoom back out">`
+            + `<span style="background:${colorFor(i)}" class="w-2.5 h-2.5 rounded-full"></span>`
+            + `${nameFor(i)} <span class="mono opacity-60">${counts[i]}</span></span>`;
+    }
+    if(S.centroids.length > shown)
+      html += `<span class="opacity-70">+${S.centroids.length - shown} more clusters</span>`;
+    setLegend(html);
+  } else {
+    setLegend(`<span class="opacity-70">no centroids yet</span>`);
+  }
+
+  /* PERF: drawChart() calls getBoundingClientRect() (a forced synchronous layout) and repaints the whole
+     curve. The curve can only change when the history does, and drawing points never touches the history,
+     so this used to be pure waste on every pointer event. resize() still redraws unconditionally. */
+  const sig = S.history.length + ":" + (S.history.length ? S.history[S.history.length - 1] : "");
+  if(sig !== lastChartSig){ lastChartSig = sig; drawChart(); }
+
+  invalidate();                     // something changed — ask the render loop for a frame
+}
+/* PERF: assigning innerHTML reparses the markup and rebuilds every child node. While drawing, the new
+   points are unassigned so the counts do not move and the markup is identical every time. */
+function setLegend(html){
+  if(html === lastLegend) return;
+  lastLegend = html;
+  $("legend").innerHTML = html;
+}
+
+/* K and n have no fixed ceiling — the UI reports whether the current pair is runnable (K ≤ distinct N)
+   and, separately, whether it is worth running at all (Task 7). */
+function syncBounds(){
+  const N = S.points.length, dp = kCap(), k = S.k;
+  $("lblK").textContent = k;
+  const n = readInt("inN", 150);
+  /* mirror the typed values onto the sliders — max first, so the value is never clamped on the way in */
+  const kMax = kSlideMax();
+  /* PERF: the max attributes are guarded (an identical attribute write still costs a re-layout of the
+     track); the values are written straight through, because those are the authority the tests and the
+     user read back and a stale guard must never be able to hold one back. */
+  setAttr($("inKR"), "max", String(kMax));
+  $("inKR").value = Math.min(k, kMax);                         // a K past the cap pins the thumb; the box keeps the truth
+  setAttr($("inNR"), "max", String(nSlideMax()));
+  $("inNR").value = n;
+
+  /* Task 5: the bound is the number of DISTINCT positions; say so when it differs from the raw count */
+  const bad = N > 0 && k > dp;
+  const counts = dp < N ? `N = ${N}, distinct = ${dp}` : `N = ${N}`;
+  const [qCls, qTxt] = kQualityHint(k, dp);
+  $("inK").classList.toggle("bad", bad);
+  $("kNote").className = "note" + (bad ? " warn" : qTxt ? " " + qCls : "");
+  $("kNote").textContent = N === 0
+    ? "no data yet · K ≤ N once points exist"
+    : bad
+      ? `K > distinct positions — needs ${k - dp} more distinct point${k - dp === 1 ? "" : "s"} (${counts})`
+      : qTxt || `K ≤ N ✓ (${counts})`;
+
+  /* Task 1: lead with the rule that must hold, so the line cannot be misread as "n must be below K" */
+  const nShort = n < k;
+  $("inN").classList.toggle("bad", nShort);
+  $("nNote").className = "note" + (nShort ? " warn" : "");
+  $("nNote").textContent = nShort
+    ? `Need n ≥ K — n = ${n} is less than K = ${k}. Increase n or lower K.`
+    : `n ≥ K ✓ · generates exactly ${n} points`;
+}
+
+/* Task 7: K ≤ distinct(N) only says the run is *possible*. This says whether it is *meaningful*.
+   Returns [class, text] — "" means nothing worth saying. */
+function kQualityHint(K, N){
+  if(!N || K > N) return ["", ""];
+  if(K === N)            return ["caution", "K = N: every point is its own cluster (SSE = 0, not meaningful)"];
+  if(N / K < 2)          return ["caution", `K is very high: only ${(N / K).toFixed(1)} points per cluster on average`];
+  if(K > 2 * Math.sqrt(N)) return ["hint", `K is higher than typical (try around ${Math.round(Math.sqrt(N / 2))})`];
+  return ["", ""];
+}
+
+const say = t => { $("msg").textContent = t; };   // the status line under the buttons — every warning the user must read lands here
+
+function hardReset(){
+  S.running = false; S.centroids = []; S.phase = "idle"; S.sel = -1;
+  S.focus = -1;                                    // a fresh run always starts from the overview
+  S.iter = 0; S.sse = null; S.maxMove = null; S.history = [];
+  S.points.forEach(p => p.c = -1);
+  sync();
+}
+
+/* ======================= TOOLS ======================= */
+const TOOLS = {
+  pen:      { cursor:"crosshair", hint:"✒️ Pen — one click puts down exactly one point at the cursor · hold and drag to lay them down one at a time" },
+  spray:    { cursor:"crosshair", hint:"💨 Spray — hold the button and points keep building up at the cursor; the longer you hold, the denser it gets (move while spraying)" },
+  brush:    { cursor:"crosshair", hint:"🖌️ Brush — drag to paint a continuous stroke · tune Size, Flow and Smooth (stabilizer) in the bar above" },
+  eraser:   { cursor:"crosshair", hint:"🧽 Eraser — drag to remove every point inside the ring, using the same stroke engine as the brush" },
+  hand:     { cursor:"grab",      hint:"✋ Hand — drag to pan · mouse wheel to zoom · middle mouse or Space+drag pans from any tool" },
+  centroid: { cursor:"pointer",   hint:"🎯 Centroid — drag to move · click empty space to add one (up to K) · right-click or Delete to remove" },
+  random:   { cursor:"default",   hint:"🎲 Random data — set n in the bar above (its option, like the brush's Size), then press Generate or G · the canvas is left alone until you do" }
+};
+const LINEMAX = 2000;        // past this many points the connector lines switch off so drawing stays smooth (the point count itself is unlimited)
+const LEGENDMAX = 24;        // K itself is unbounded; the legend just stops listing past this and shows "+n more"
+S.tool = "brush"; S.sel = -1;
+
+const busy   = () => S.running || S.animating;
+const brushR = () => +$("inBrush").value;                    // brush radius in screen pixels — constant at every zoom level
+const stabF  = () => +$("inStab").value / 100;               // 0 = raw pointer, 0.9 = heavily damped
+const spacing = () => Math.max(2.5, brushR() * 0.22);        // distance between dabs along a stroke
+const SPRAYMS = 45;                                          // spray cadence in milliseconds
+const PENMIN  = 4;                                           // minimum gap between pen points while dragging
+let hoverPt = null, hoverC = -1, mode = null, spaceDown = false;
+let panFrom = null, dragI = -1, dragOff = null, lastPaint = null, dragMoved = 0;
+/* Live stroke state: sx,sy = smoothed head · lx,ly = last dab · carry = leftover distance from the previous event */
+const stroke = { on: false, sx: 0, sy: 0, lx: 0, ly: 0, carry: 0 };
+
+function setTool(t){
+  if(!TOOLS[t]) return;
+  const changed = S.tool !== t;
+  S.tool = t;
+  if(changed){ S.sel = -1; hoverC = -1; say(TOOLS[t].hint); }
+  sync();
+}
+
+/* ---------- brush / eraser (paint-tool stroke engine) ---------- */
+/* One brush dab: scatter points inside the circle, dense in the middle and thinning at the rim */
+function dab(x, y, exact){
+  const rw = brushR() / sc(), c = toLogical(x, y), dens = +$("inDens").value;
+  let added = 0;
+  for(let i = 0; i < dens; i++){
+    let p;
+    if(exact && i === 0) p = { x: c.x, y: c.y, c: -1 };      // first point of a stroke lands exactly on the cursor
+    else {
+      const a = Math.random() * Math.PI * 2;
+      const r = rw * Math.pow(Math.random(), 0.75);          // exponent > 0.5 packs the ink toward the centre
+      p = { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r, c: -1 };
+    }
+    S.points.push(p); added++;
+  }
+  return added;
+}
+/* Erase every point inside the brush ring at the given screen position */
+function erasePx(x, y){
+  const rw = brushR() / sc(), c = toLogical(x, y), r2 = rw * rw, before = S.points.length;
+  S.points = S.points.filter(p => d2(p, c) > r2);
+  return before - S.points.length;
+}
+function sprayAt(m, exact){
+  const n = dab(m.x, m.y, exact);
+  if(n && S.centroids.length) S.phase = "assign";            // new points → the assignment is stale
+  return n;
+}
+function eraseAt(m){
+  const n = erasePx(m.x, m.y);
+  if(n && S.centroids.length) S.phase = "assign";
+  return n;
+}
+
+/* ---------- pen: one press = exactly one point at the cursor, with no scatter ----------
+   Holding and dragging is allowed, but points come out one at a time along the path */
+function penAt(m){
+  const c = toLogical(m.x, m.y);
+  S.points.push({ x: c.x, y: c.y, c: -1 });
+  if(S.centroids.length) S.phase = "assign";
+  return 1;
+}
+
+/* ---------- spray (a spray can: emits over time, not over distance) ---------- */
+let sprayOn = false, sprayT0 = 0;
+function sprayPuff(){
+  if(!hoverPt) return 0;
+  const n = dab(hoverPt.x, hoverPt.y, false);
+  if(n && S.centroids.length) S.phase = "assign";
+  return n;
+}
+function sprayLoop(now){
+  if(mode !== "spray"){ sprayOn = false; return; }
+  if(now - sprayT0 >= SPRAYMS){ sprayT0 = now; sprayPuff(); sync(); }
+  requestAnimationFrame(sprayLoop);
+}
+function startSpray(m){
+  mode = "spray"; hoverPt = m; sprayT0 = performance.now();
+  sprayPuff(); sync();
+  if(!sprayOn){ sprayOn = true; requestAnimationFrame(sprayLoop); }
+}
+
+function beginStroke(m){
+  stroke.on = true; stroke.carry = 0;
+  stroke.sx = stroke.lx = m.x;
+  stroke.sy = stroke.ly = m.y;
+}
+function endStroke(){ stroke.on = false; stroke.carry = 0; }
+
+/* Continuous stroke: damp the pointer first (stabilizer), then dab at a fixed spacing along the path.
+   A fast drag therefore stays unbroken, and density no longer depends on how often pointer events fire */
+function strokeTo(m, erasing){
+  if(!stroke.on) beginStroke(m);
+  const a = 1 - stabF();
+  stroke.sx += (m.x - stroke.sx) * a;
+  stroke.sy += (m.y - stroke.sy) * a;
+
+  const dx = stroke.sx - stroke.lx, dy = stroke.sy - stroke.ly;
+  const dist = Math.hypot(dx, dy);
+  if(dist < 1e-9) return 0;
+
+  const sp = spacing();
+  let travelled = stroke.carry, walked = 0, n = 0;
+  while(travelled + (dist - walked) >= sp){
+    walked += sp - travelled;
+    const t = walked / dist;
+    const x = stroke.lx + dx * t, y = stroke.ly + dy * t;
+    n += erasing ? erasePx(x, y) : dab(x, y, false);
+    travelled = 0;
+  }
+  stroke.carry = travelled + (dist - walked);
+  stroke.lx = stroke.sx; stroke.ly = stroke.sy;
+  if(n && S.centroids.length) S.phase = "assign";
+  return n;
+}
+
+/* ---------- centroid editing ---------- */
+function hitCentroid(m){
+  for(let i = S.centroids.length - 1; i >= 0; i--){
+    const a = px({ x: S.centroids[i].ax, y: S.centroids[i].ay });
+    if(Math.hypot(m.x - a.x, m.y - a.y) <= 16) return i;
+  }
+  return -1;
+}
+/* A manual centroid edit restarts the iteration count — the previous SSE curve is no longer comparable */
+function afterCentroidEdit(msg){
+  S.running = false; S.history = []; S.iter = 0; S.maxMove = null;
+  S.centroids.forEach(c => { c.ax = c.x; c.ay = c.y; c.trail = [{ x: c.x, y: c.y }]; });
+  if(S.centroids.length && S.points.length){
+    S.sse = assignAll(S.points, S.centroids).sse;
+    S.phase = "assign";
+  } else {
+    S.points.forEach(p => p.c = -1);
+    S.sse = null; S.phase = S.centroids.length ? "assign" : "idle";
+  }
+  if(msg) say(msg);
+  sync();
+}
+function spawnCentroid(w){
+  if(S.centroids.length >= S.k){
+    say("⚠️ At most K = " + S.k + " centroids — raise K, or delete one first (right-click it)");
+    return false;
+  }
+  S.centroids.push({ x: w.x, y: w.y, ax: w.x, ay: w.y, trail: [{ x: w.x, y: w.y }] });
+  S.sel = S.centroids.length - 1;
+  afterCentroidEdit("Placed a centroid at (" + w.x.toFixed(1) + ", " + w.y.toFixed(1) + ") — now " + S.centroids.length + "/" + S.k);
+  return true;
+}
+function deleteCentroid(i){
+  if(i < 0 || i >= S.centroids.length) return false;
+  S.centroids.splice(i, 1);
+  for(const p of S.points){                                  // shift the labels to match the new indices
+    if(p.c === i) p.c = -1;
+    else if(p.c > i) p.c--;
+  }
+  S.sel = -1; hoverC = -1;
+  afterCentroidEdit("Centroid deleted — " + S.centroids.length + "/" + S.k + " left (the algorithm still runs with what remains)");
+  return true;
+}
+function trimCentroids(n){
+  if(S.centroids.length <= n) return false;
+  while(S.centroids.length > n){
+    const i = S.centroids.length - 1;
+    S.centroids.pop();
+    for(const p of S.points) if(p.c === i) p.c = -1;
+  }
+  S.sel = -1;
+  afterCentroidEdit("K lowered to " + n + " — the extra centroids were trimmed");
+  return true;
+}
+
+/* ======================= CANVAS EVENTS ======================= */
+/* PERF: getBoundingClientRect() forces a synchronous layout, and this ran on EVERY pointermove — a
+   guaranteed reflow per event while drawing, on top of everything the event handler then did. The canvas
+   only moves when the page resizes or scrolls, so the rect is cached and dropped on exactly those. */
+let canvasRect = null;
+const evPos = ev => {
+  const r = canvasRect || (canvasRect = canvas.getBoundingClientRect());
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+};
+const BUSYMSG = "⏸ The algorithm is running — stop it or wait for convergence before editing the canvas";
+
+function onDown(e){
+  if(e.button === 2) return;                                 // right-click is handled by contextmenu
+  const m = evPos(e);
+  hoverPt = m;
+  if(canvas.setPointerCapture && e.pointerId != null) canvas.setPointerCapture(e.pointerId);
+  if(e.button === 1 || spaceDown || S.tool === "hand"){      // panning is always allowed, even mid-run
+    if(e.preventDefault) e.preventDefault();
+    mode = "pan"; panFrom = { mx: m.x, my: m.y, px: V.px, py: V.py };
+    canvas.style.cursor = "grabbing";
+    return;
+  }
+  if(busy()){ say(BUSYMSG); return; }
+  if(S.tool === "centroid"){
+    const i = hitCentroid(m);
+    if(i >= 0){
+      mode = "drag"; dragI = i; S.sel = i; dragMoved = 0;
+      const w = toLogical(m.x, m.y);
+      dragOff = { x: S.centroids[i].x - w.x, y: S.centroids[i].y - w.y };
+      sync();
+    } else spawnCentroid(toLogical(m.x, m.y));
+    return;
+  }
+  if(S.tool === "pen"){ mode = "pen"; penAt(m); lastPaint = m; sync(); }
+  else if(S.tool === "spray"){ startSpray(m); }
+  else if(S.tool === "brush"){ mode = "paint"; beginStroke(m); sprayAt(m, true); lastPaint = m; sync(); }
+  else if(S.tool === "eraser"){ mode = "erase"; beginStroke(m); eraseAt(m); lastPaint = m; sync(); }
+}
+
+function onMove(e){
+  const m = evPos(e);
+  hoverPt = m;
+  invalidate();                     // the brush ring follows the cursor, so every move needs a frame
+  if(mode === "pan"){
+    V.px = panFrom.px + (m.x - panFrom.mx);
+    V.py = panFrom.py + (m.y - panFrom.my);
+    markView();                              // infinite canvas: the pan is never clamped
+    return;
+  }
+  if(mode === "drag"){
+    const c = S.centroids[dragI];
+    if(!c) return;
+    const w = toLogical(m.x, m.y);
+    const nx = w.x + dragOff.x, ny = w.y + dragOff.y;
+    dragMoved += Math.hypot(nx - c.x, ny - c.y);
+    c.x = c.ax = nx; c.y = c.ay = ny;
+    return;
+  }
+  if(mode === "pen"){                           // dragging lays points down one at a time
+    if(lastPaint && Math.hypot(m.x - lastPaint.x, m.y - lastPaint.y) < PENMIN) return;
+    penAt(m); lastPaint = m; sync();
+    return;
+  }
+  if(mode === "spray") return;                  // the spray runs on its own clock from the latest hoverPt
+  if(mode === "paint" || mode === "erase"){
+    strokeTo(m, mode === "erase");
+    lastPaint = m; sync();
+    return;
+  }
+  if(S.tool === "centroid"){
+    const i = hitCentroid(m);
+    if(i !== hoverC){ hoverC = i; canvas.style.cursor = i >= 0 ? "grab" : TOOLS.centroid.cursor; }
+  }
+}
+
+function onUp(){
+  invalidate();                     // the ring/leash state changes when the stroke ends
+  if(mode === "drag" && S.centroids[dragI]){
+    if(dragMoved > 0.05) afterCentroidEdit("Moved " + nameFor(dragI) + " by hand → reassigned from where you dropped it (iteration count restarts)");
+    else { say("Selected " + nameFor(dragI) + " — drag to move it, or press Delete to remove it"); sync(); }
+  }
+  endStroke();
+  mode = null; dragI = -1; lastPaint = null; panFrom = null;
+  canvas.style.cursor = TOOLS[S.tool].cursor;
+}
+
+function onWheel(e){
+  if(e.preventDefault) e.preventDefault();
+  const m = evPos(e);
+  zoomAt(m.x, m.y, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+}
+
+function onContext(e){
+  if(e.preventDefault) e.preventDefault();
+  if(busy()){ say(BUSYMSG); return; }
+  const i = hitCentroid(evPos(e));
+  if(i >= 0) deleteCentroid(i);
+  else if(S.tool === "centroid") say("Right-click a centroid to delete it — left-click empty space to add one");
+}
+
+function onKey(e){
+  const t = e.target && e.target.tagName;
+  if(t === "INPUT" || t === "SELECT" || t === "TEXTAREA") return;
+  if(e.code === "Space"){
+    if(!spaceDown){ spaceDown = true; if(!mode) canvas.style.cursor = "grab"; }
+    if(e.preventDefault) e.preventDefault();
+    return;
+  }
+  const k = (e.key || "").toLowerCase();
+  if(k === "p") setTool("pen");
+  else if(k === "s") setTool("spray");
+  else if(k === "b") setTool("brush");
+  else if(k === "e") setTool("eraser");
+  else if(k === "h") setTool("hand");
+  else if(k === "c") setTool("centroid");
+  else if(k === "r") setTool("random");
+  else if(e.key === "Delete" || e.key === "Backspace"){
+    if(busy()) say(BUSYMSG);
+    else if(S.sel >= 0) deleteCentroid(S.sel);
+    else say("Select a centroid first (click one with the 🎯 tool), then press Delete");
+  }
+  else if(e.key === "+" || e.key === "=") zoomAt(cw / 2, ch / 2, 1.25);
+  else if(e.key === "-" || e.key === "_") zoomAt(cw / 2, ch / 2, 1 / 1.25);
+  else if(e.key === "0") resetView();
+  else if(k === "f") focusView();
+  else if(k === "g"){                                   // feedback 6: the random button is a tool-bar action now
+    if($("bGen").disabled) say("🎲 needs n ≥ K first — raise n or lower K");
+    else generate();
+  }
+}
+
+canvas.addEventListener("pointerdown", onDown);
+canvas.addEventListener("pointermove", onMove);
+canvas.addEventListener("pointerleave", () => { if(!mode) hoverPt = null; invalidate(); });
+canvas.addEventListener("wheel", onWheel, { passive: false });
+canvas.addEventListener("contextmenu", onContext);
+window.addEventListener("pointerup", onUp);
+window.addEventListener("keydown", onKey);
+window.addEventListener("keyup", e => {
+  if(e.code === "Space"){ spaceDown = false; if(!mode) canvas.style.cursor = TOOLS[S.tool].cursor; }
+});
+
+document.querySelectorAll(".tool").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
+/* These three change the on-canvas brush ring, and the checkboxes change what render() draws — with the
+   loop demand-driven they have to say so, where the old always-on chain picked it up by accident. */
+$("inBrush").addEventListener("input", e => { setText($("lblBrush"), e.target.value); invalidate(); });
+$("inDens").addEventListener("input",  e => { setText($("lblDens"),  e.target.value); invalidate(); });
+$("inStab").addEventListener("input",  e => { setText($("lblStab"),  e.target.value + "%"); invalidate(); });
+$("cbLines").addEventListener("change", invalidate);
+$("cbTrail").addEventListener("change", invalidate);
+$("bZoomIn").onclick  = () => zoomAt(cw / 2, ch / 2, 1.25);
+$("bZoomOut").onclick = () => zoomAt(cw / 2, ch / 2, 1 / 1.25);
+$("bZoomRst").onclick = () => { resetView(); say("View reset to 100%"); };
+$("bFocus").onclick = () => { clearFocus(false); focusView(); say("Focused on data points"); };
+
+/* Click-to-focus on the cluster status bar — delegated, because sync() rebuilds the legend */
+$("legend").addEventListener("click", e => {
+  const el = e.target && e.target.closest && e.target.closest(".cluster-status-item");
+  if(!el) return;
+  focusCluster(+el.dataset.cluster);
+});
+$("legend").addEventListener("keydown", e => {
+  if(e.key !== "Enter" && e.key !== " ") return;
+  const el = e.target && e.target.closest && e.target.closest(".cluster-status-item");
+  if(!el) return;
+  if(e.preventDefault) e.preventDefault();
+  focusCluster(+el.dataset.cluster);
+});
+
+/* ======================= CONTROL EVENTS ======================= */
+/* Typing and scrubbing run the exact same code — the slider just writes the box first */
+function applyK(raw){
+  if(!Number.isFinite(raw) || raw < KMIN) return;            // mid-typing (blank / 0) — wait for a real value
+  S.k = raw; $("lblK").textContent = S.k;
+  if(!S.centroids.length) hardReset();                       // nothing started yet → plain reset
+  else if(S.centroids.length > S.k) trimCentroids(S.k);      // K went down → trim the extras
+  else {
+    const over = S.points.length && S.k > S.points.length
+      ? ` · ⚠️ K > N (${S.points.length} points) — k-means needs K ≤ N, add points first`
+      : "";
+    say("K = " + S.k + " · " + S.centroids.length + " centroids placed — add more with the 🎯 tool, or press Initialize to resample the whole set" + over);
+    sync();
+  }
+}
+/* Task 3 — K and n are bound to each other: raising K drags n up, lowering n drags K down, so the
+   pair can never settle in the unusable n < K state. Dragging a slider commits on every step, so it
+   clamps live; the typed boxes clamp on `change` (blur / Enter) only, never per keystroke, so typing
+   "1672" one digit at a time is not fought by the clamp. */
+function raiseNfor(k){
+  if(readInt("inN", 150) >= k) return;
+  $("inN").value = k;                                        // n follows K up
+}
+function lowerKfor(n){
+  if(S.k <= n) return false;
+  $("inK").value = n;                                        // K follows n down
+  applyK(n);
+  return true;
+}
+$("inK").addEventListener("input", e => { applyK(Math.round(+e.target.value)); });
+$("inKR").addEventListener("input", e => {                   // scrubbing writes the box, then takes the same path
+  const v = Math.round(+e.target.value);
+  $("inK").value = v;
+  raiseNfor(v);
+  applyK(v);
+});
+$("inK").addEventListener("change", e => {                   // normalise + clamp on commit, not per keystroke
+  const v = Math.max(KMIN, Math.round(+e.target.value) || KMIN);
+  e.target.value = v; S.k = v;
+  raiseNfor(v);
+  sync();
+});
+$("inN").addEventListener("input", () => { sync(); });
+$("inNR").addEventListener("input", e => {
+  const v = Math.round(+e.target.value);
+  $("inN").value = v;
+  if(!lowerKfor(v)) sync();                                  // applyK already syncs when it fires
+});
+$("inN").addEventListener("change", e => {
+  const v = Math.max(1, Math.round(+e.target.value) || 1);
+  e.target.value = v;
+  if(!lowerKfor(v)) sync();
+});
+$("inSpd").addEventListener("input", e => { S.speed = +e.target.value; $("lblSpd").textContent = SPDLBL[S.speed]; });
+$("inData").addEventListener("change", generate);
+
+$("bGen").onclick   = generate;
+$("bClr").onclick   = () => { S.points = []; hardReset(); say("All points cleared — draw your own with the 🖌️ brush"); };
+$("bInit").onclick  = doInit;
+$("bStep").onclick  = () => nextStep();
+$("bRun").onclick   = runToCompletion;
+$("bBest").onclick  = () => bestOfN(10);
+$("bReset").onclick = () => { hardReset(); say("Reset — the data points stay; press Initialize Centroids to start again (randomness may give a different answer)"); };
+
+window.addEventListener("resize", () => { resize(); drawChart(); invalidate(); });
+window.addEventListener("scroll", () => { canvasRect = null; }, true);   // the cached rect moved with the page
+new ResizeObserver(() => { resize(); drawChart(); invalidate(); }).observe(canvas);
+
+/* ======================= TEST HOOK ======================= */
+/* Expose internals for the unit tests in tests/ — no effect on normal use */
+window.__app = {
+  S, V, TOOLS, COLORS, NAMES, LINEMAX, LEGENDMAX, EPS, SPEEDS, KMIN,
+  colorFor, nameFor, hslHex, readInt, kCap, distinctPoints, kFeasible, syncBounds,
+  applyK, kSlideMax, nSlideMax, KSLIDE, NSLIDE, split, kQualityHint, raiseNfor, lowerKfor,
+  clusterBox, viewFor, allBox, tweenView, focusCluster, clearFocus, FOCUSMS, FOCUSPAD, DIMALPHA, FOCUSZMAX,
+  get lastEmptyFixed(){ return lastEmptyFixed; },
+  get LX(){ return LX; }, get LY(){ return LY; },
+  get unit(){ return unit; }, get ox(){ return ox; }, get oy(){ return oy; },
+  get plotW(){ return plotW; }, get plotH(){ return plotH; },
+  get cw(){ return cw; }, get ch(){ return ch; },
+  px, toLogical, d2, sc, markView, zoomAt, resetView, syncView,
+  gauss, rnd, clampPt, blob, sdFor, spreadCenters, generate,
+  pickInitial, assignAll, meanUpdate, silentRun,
+  doInit, doAssign, doUpdate, nextStep, runToCompletion, bestOfN, animateTo, hardReset,
+  currentPhaseKey, sync, say, resize, render, invalidate, frame, drawGrid, drawChart,
+  get dirty(){ return dirty; }, get paints(){ return paints; },
+  get bucketCount(){ return bucket.size; },
+  setTool, brushR, busy, sprayAt, eraseAt, dab, erasePx, strokeTo, beginStroke, endStroke,
+  sprayPuff, startSpray, sprayLoop, SPRAYMS, penAt, PENMIN,
+  stabF, spacing, get stroke(){ return stroke; },
+  hitCentroid, spawnCentroid, deleteCentroid,
+  trimCentroids, afterCentroidEdit, evPos,
+  onDown, onMove, onUp, onWheel, onContext, onKey,
+  get mode(){ return mode; }, get hoverPt(){ return hoverPt; }, get hoverC(){ return hoverC; },
+  get spaceDown(){ return spaceDown; }
+};
+
+/* ======================= BOOT ======================= */
+resize();
+setTool("brush");
+syncView();
+generate();
+render();
+</script>
+</body>
+</html>
